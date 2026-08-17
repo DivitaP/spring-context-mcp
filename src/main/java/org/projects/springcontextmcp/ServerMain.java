@@ -297,6 +297,16 @@ public final class ServerMain {
                         + "Use to confirm the index covers the project before trusting other results.",
                 schema(),
                 args -> awaitTools().stats());
+
+        register("expand",
+                """
+                Source body of a specific method. Every other tool returns signatures only \
+                to protect the context window - call this when you actually need to read the \
+                implementation of one method surfaced by trace_endpoint or find_callers.""",
+                schema(prop("type", "string", "Class name owning the method.", true),
+                        prop("method", "string", "Method name.", true),
+                        prop("max_lines", "integer", "Cap on lines returned. Default 80.", false)),
+                args -> awaitTools().expand(str(args, "type"), str(args, "method"), intOrNull(args, "max_lines")));
     }
 
     private void register(String name, String description, ObjectNode schema, Function<JsonNode, String> handler) {

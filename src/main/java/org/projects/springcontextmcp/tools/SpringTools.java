@@ -120,6 +120,17 @@ public final class SpringTools {
                 sb.append(e.httpMethod()).append(' ').append(e.path()).append('\n');
                 sb.append("  ").append(shortName(e.controllerFqn())).append('.').append(e.signature())
                         .append("   ").append(e.file()).append(':').append(e.line()).append('\n');
+
+                List<PreHandler> pre = index.preHandlersFor(e.controllerFqn());
+                if (!pre.isEmpty()) {
+                    sb.append("  BEFORE HANDLER (Spring invokes these first):\n");
+                    for (PreHandler p : pre) {
+                        sb.append("    @").append(p.kind().equals("MODEL_ATTRIBUTE") ? "ModelAttribute" : "InitBinder")
+                                .append(' ').append(p.signature()).append("  :").append(p.line()).append('\n');
+                        walk(sb, e.controllerFqn(), p.methodName(), 2, new HashSet<>(), budget);
+                    }
+                }
+
                 walk(sb, e.controllerFqn(), e.methodName(), 1, new HashSet<>(), budget);
                 sb.append('\n');
             }
@@ -175,6 +186,33 @@ public final class SpringTools {
             calledVia.keySet().stream().limit(2)
                     .forEach(m -> walk(sb, target.fqn(), m, depth + 1, seen, budget));
         }
+    }
+
+    /** Method body on demand. The counterpart to returning signatures everywhere else. */
+    public String expand(String type, String method, Integer maxLines) {
+        int cap = maxLines == null ? 80 : maxLines;
+        return timed("expand", Map.of("type", type, "method", method), () -> {
+            for (String fqn : index.resolveType(type)) {
+                Optional<MethodLoc> loc = index.methodLoc(fqn, method);
+                if (loc.isEmpty()) continue;
+                MethodLoc l = loc.get();
+                try {
+                    List<String> lines = java.nio.file.Files.readAllLines(java.nio.file.Path.of(l.file()));
+                    int from = Math.max(0, l.beginLine() - 1);
+                    int to = Math.min(lines.size(), l.endLine());
+                    StringBuilder sb = new StringBuilder(l.file() + ":" + l.beginLine() + "\n");
+                    for (int i = from; i < Math.min(to, from + cap); i++) {
+                        sb.append(i + 1).append("  ").append(lines.get(i)).append('\n');
+                    }
+                    if (to - from > cap) sb.append("... ").append(to - from - cap).append(" more lines\n");
+                    return sb.toString();
+                } catch (Exception ex) {
+                    return err("Could not read " + l.file() + ": " + ex.getMessage(), null);
+                }
+            }
+            return err("No method '" + method + "' on '" + type + "'.",
+                    "Call trace_endpoint or list_beans to see available methods.");
+        });
     }
 
     /** Methods reachable from an entry method through intra-class calls, including itself. */

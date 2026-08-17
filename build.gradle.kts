@@ -36,6 +36,7 @@ application {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("petclinic.path", providers.gradleProperty("target").orNull ?: "")
     testLogging {
         events("passed", "skipped", "failed")
     }

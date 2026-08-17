@@ -59,6 +59,8 @@ public final class IndexBuilder {
     private final List<Endpoint> endpoints = new ArrayList<>();
     private final List<CallEdge> calls = new ArrayList<>();
     private final List<Relationship> relationships = new ArrayList<>();
+    private final List<PreHandler> preHandlers = new ArrayList<>();
+    private final List<MethodLoc> methodLocs = new ArrayList<>();
 
     public IndexBuilder(Path projectRoot) {
         this.projectRoot = projectRoot;
@@ -84,7 +86,7 @@ public final class IndexBuilder {
                     .forEach(this::visit);
         }
 
-        return new SpringIndex(beans, injections, endpoints, calls, relationships);
+        return new SpringIndex(beans, injections, endpoints, calls, relationships, preHandlers, methodLocs);
     }
 
     private static List<Path> findSourceRoots(Path root) throws Exception {
@@ -119,9 +121,11 @@ public final class IndexBuilder {
 
                 collectInjections(cls, fqn);
                 collectCalls(cls, fqn);
+                collectMethodLocs(cls, fqn, file);
 
                 if (stereotype.get() == Stereotype.CONTROLLER || stereotype.get() == Stereotype.REST_CONTROLLER) {
                     collectEndpoints(cls, fqn, file);
+                    collectPreHandlers(cls, fqn);
                 }
             }
 
@@ -387,6 +391,28 @@ public final class IndexBuilder {
         if (e instanceof StringLiteralExpr s) return s.getValue();
         if (e instanceof ArrayInitializerExpr a && !a.getValues().isEmpty()) return literal(a.getValues().get(0));
         return e.toString().replace("\"", "");
+    }
+
+    private void collectPreHandlers(ClassOrInterfaceDeclaration cls, String fqn) {
+        for (MethodDeclaration m : cls.getMethods()) {
+            String kind = m.getAnnotationByName("ModelAttribute").isPresent() ? "MODEL_ATTRIBUTE"
+                    : m.getAnnotationByName("InitBinder").isPresent() ? "INIT_BINDER"
+                    : null;
+            if (kind == null) continue;
+
+            // Spring runs these before every handler in the controller. A handler that
+            // looks like it touches nothing may already have hit the database here.
+            preHandlers.add(new PreHandler(fqn, m.getNameAsString(), kind,
+                    signatureOf(m), m.getBegin().map(p -> p.line).orElse(0)));
+        }
+    }
+
+    private void collectMethodLocs(ClassOrInterfaceDeclaration cls, String fqn, String file) {
+        for (MethodDeclaration m : cls.getMethods()) {
+            methodLocs.add(new MethodLoc(fqn, m.getNameAsString(), signatureOf(m), file,
+                    m.getBegin().map(p -> p.line).orElse(0),
+                    m.getEnd().map(p -> p.line).orElse(0)));
+        }
     }
 }
 

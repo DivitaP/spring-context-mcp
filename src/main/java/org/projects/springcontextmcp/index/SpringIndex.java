@@ -69,6 +69,25 @@ public final class SpringIndex {
             String mappedBy              // may be null
     ) {}
 
+    /** A method Spring invokes around the handler: @ModelAttribute or @InitBinder. */
+    public record PreHandler(
+            String controllerFqn,
+            String methodName,
+            String kind,              // MODEL_ATTRIBUTE / INIT_BINDER
+            String signature,
+            int line
+    ) {}
+
+    /** Source location of a method body, for expand(). */
+    public record MethodLoc(
+            String fqn,
+            String method,
+            String signature,
+            String file,
+            int beginLine,
+            int endLine
+    ) {}
+
     private final List<BeanDef> beans;
     private final List<InjectionPoint> injections;
     private final List<Endpoint> endpoints;
@@ -76,12 +95,17 @@ public final class SpringIndex {
     private final List<Relationship> relationships;
     private final Map<String, List<String>> interfaceToImpls;   // interface fqn -> impl fqns
     private final Map<String, BeanDef> beansByFqn;
+    private final List<PreHandler> preHandlers;
+    private final Map<String, MethodLoc> methodLocs;
+
 
     public SpringIndex(List<BeanDef> beans,
                        List<InjectionPoint> injections,
                        List<Endpoint> endpoints,
                        List<CallEdge> calls,
-                       List<Relationship> relationships) {
+                       List<Relationship> relationships,
+                       List<PreHandler> preHandlers,
+                       List<MethodLoc> methodLocs) {
         this.beans = List.copyOf(beans);
         this.injections = List.copyOf(injections);
         this.endpoints = List.copyOf(endpoints);
@@ -89,7 +113,9 @@ public final class SpringIndex {
         this.relationships = List.copyOf(relationships);
         this.beansByFqn = beans.stream()
                 .collect(Collectors.toMap(BeanDef::fqn, b -> b, (a, b) -> a));
-
+        this.preHandlers = List.copyOf(preHandlers);
+        this.methodLocs = methodLocs.stream()
+                .collect(Collectors.toMap(m -> m.fqn() + "#" + m.method(), m -> m, (a, b) -> a));
         Map<String, List<String>> idx = new HashMap<>();
         for (BeanDef b : beans) {
             for (String iface : b.interfaces()) {
@@ -121,6 +147,14 @@ public final class SpringIndex {
                 .thenComparing(b -> b.primary() ? 0 : 1)
                 .thenComparing(BeanDef::fqn));
         return defs;
+    }
+
+    public List<PreHandler> preHandlersFor(String controllerFqn) {
+        return preHandlers.stream().filter(p -> p.controllerFqn().equals(controllerFqn)).toList();
+    }
+
+    public Optional<MethodLoc> methodLoc(String fqn, String method) {
+        return Optional.ofNullable(methodLocs.get(fqn + "#" + method));
     }
 
     private static boolean matchesQualifier(BeanDef b, String q) {
