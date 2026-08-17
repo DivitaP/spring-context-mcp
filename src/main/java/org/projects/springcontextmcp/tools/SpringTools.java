@@ -122,7 +122,24 @@ public final class SpringTools {
                         .append("   ").append(e.file()).append(':').append(e.line()).append('\n');
 
                 List<PreHandler> pre = index.preHandlersFor(e.controllerFqn());
-                if (!pre.isEmpty()) {
+                List<PreHandler> model = pre.stream()
+                        .filter(p -> p.kind().equals("MODEL_ATTRIBUTE")).toList();
+                long binders = pre.size() - model.size();
+
+                if (!model.isEmpty() || binders > 0) {
+                    sb.append("  BEFORE HANDLER (Spring invokes these first):\n");
+                    for (PreHandler p : model) {
+                        sb.append("    @ModelAttribute ").append(p.signature())
+                                .append("  :").append(p.line()).append('\n');
+                        walk(sb, e.controllerFqn(), p.methodName(), 2, new HashSet<>(), budget);
+                    }
+                    // Binders configure data binding, not the data path. Listing them in
+                    // full costs tokens on every trace and tells the agent nothing about
+                    // what the route touches.
+                    if (binders > 0) {
+                        sb.append("    (").append(binders).append(" @InitBinder method(s), binding config)\n");
+                    }
+                }                if (!pre.isEmpty()) {
                     sb.append("  BEFORE HANDLER (Spring invokes these first):\n");
                     for (PreHandler p : pre) {
                         sb.append("    @").append(p.kind().equals("MODEL_ATTRIBUTE") ? "ModelAttribute" : "InitBinder")
