@@ -1,0 +1,12 @@
+[versions]
+javaparser = "3.26.4"
+jackson = "2.18.2"
+junit = "5.11.4"
+
+[libraries]
+javaparser-symbol-solver = { module = "com.github.javaparser:javaparser-symbol-solver-core", version.ref = "javaparser" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version = "9.6.1" }
